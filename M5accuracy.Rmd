@@ -1,0 +1,132 @@
+---
+title: "Beginner's Guide to Forcasting using R"
+author: "Kuldeep Singh Chouhan"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+---
+
+# Introduction
+
+In this competition we are given a task to predict the sales for the next 28 days for **[Walmart](https://en.wikipedia.org/wiki/Walmart)** the **world's largest company by revenue.** We will use hierarchical sales data from Walmart at three US states of California, Texas, and Wisconsin. This is one of the two complementary competitions that together comprise the M5 forecasting challenge. This one is **M5 Forecasting Accuracy** and the other is **[M5 Forecasting Uncertainty](https://www.kaggle.com/c/m5-forecasting-uncertainty)** where our task is to estimate the uncertainity of our predicitions.
+
+The Makridakis Open Forecasting Center (MOFC) at the University of Nicosia conducts cutting-edge forecasting research and provides business forecast training. It helps companies achieve accurate predictions, estimate the levels of uncertainty, avoiding costly mistakes, and apply best forecasting practices. The MOFC is well known for its Makridakis Competitions, the first of which ran in the 1980s.
+
+
+In this kernel I will try to perform some EDA to make some intuition about the data and the competition. 
+
+```{r message=FALSE, warning=FALSE}
+## Importing packages
+library(tidyverse) 
+library(data.table)
+library(knitr)
+library(kableExtra)
+library(lubridate)
+library(prophet)
+library(ggplotify)
+```
+
+# Loading And Understanding Data {.tabset .tabset-fade .tabset-pills}
+
+Let's load our data first!
+
+```{r message=FALSE}
+calendar <- read_csv("input/calendar.csv")
+train <- fread("input/sales_train_validation.csv")
+price <- fread("input/sell_prices.csv")
+submission <- fread("input/sample_submission.csv")
+
+```
+
+The data, covers stores in three US States (California, Texas, and Wisconsin) and includes item level, department, product categories, and store details. In addition, it has explanatory variables such as price, promotions, day of the week, and special events. Together, this robust dataset can be used to improve forecasting accuracy. We will look at each **.csv** to get some information or glimpse about the type of data we are working with.
+
+## Calendar
+
+**calendar.csv** - Contains the dates on which products are sold. The dates are in a yyyy/dd/mm format. This csv file consists of total 14 variables (features) and 1969 rows (observations). 
+
+  * It has features such as weekday, year, date, month representing date. It also consists of 4 colums reprsenting event features (such as religious festivals, holidays, cultural etc) and three snaps colums for three states. 
+  
+  * **The Supplemental Nutrition Assistance Program (SNAP)** is the largest federal nutrition assistance program. SNAP provides benefits to eligible low-income individuals and families via an Electronic Benefits Transfer card. For more information you check [here](https://www.benefits.gov/benefit/361).
+  
+  * It consists of days column with total 1969 days. The date starts from 2011-01-29 to 2016-06-19 including the validation period of 28 days which is not included in the training data.
+
+```{r}
+calendar[1:5,] %>%
+  kable(format = "html") %>%
+  kable_styling()
+
+```
+
+## Sales Training Data
+
+**sales_train.csv** - Contains the historical daily unit sales data per product and store [d_1 - d_1913]. 
+
+  * This is the main training data. We can see there are columns containing information such as item, department, category, store and state and date variables for representing sales per date. 
+
+  * It has Columns starting with **d_** prefix which are dates indicating sales per day ranging from d_1 to d_1913, mean total 1913 days from 2011-01-29 to 2016-04-24. After including evaluation data of 28 days it will have total 1941 days which will be available once month before competition deadline.
+  
+  * Most of the observations are from the state of **California** followed by **Texas & Wisconsin.**
+  
+```{r}
+train[1:5, 1:10] %>%
+  kable() %>%
+  kable_styling()
+```
+
+  * There are 10 stores in 3 states. 4 stores in California, 3 in Texas and 3 in Wisconsin. Also there are 3049 individual products across all stores.
+  
+```{r}
+train %>%
+  group_by(store_id, state_id) %>%
+  count() %>%
+  kable() %>%
+  kable_styling()
+```
+
+  * There are 7 departments with 3 different categories.
+   
+```{r}
+train %>%
+  group_by(dept_id, cat_id) %>%
+  count() %>%
+  kable() %>%
+  kable_styling()
+```
+
+## Price Data
+
+**sell_prices.csv** - the store and item IDs together with the sales price of the item as a weekly average.
+
+
+```{r}
+price[1:10,] %>%
+  kable() %>%
+  kable_styling()
+```
+
+# Exploratory Data Analysis: Time Series 
+
+```{r}
+extract_ts <- function(df){
+  
+  min_date <- date("2011-01-29")
+  
+  df %>%
+    select(id, starts_with("d_")) %>%  
+    pivot_longer(starts_with("d_"), names_to = "dates", values_to = "sales") %>%
+    mutate(dates = as.integer(str_remove(dates, "d_"))) %>% 
+    mutate(dates = min_date + dates - 1) %>% 
+    mutate(id = str_remove(id, "_validation"))
+}
+```
+
+
+# Explanatory Variables
