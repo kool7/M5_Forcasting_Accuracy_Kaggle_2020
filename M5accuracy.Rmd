@@ -1,10 +1,10 @@
 ---
-title: "Beginner's Guide to Forcasting using R"
+title: "M5 Forecasting: Accuracy EDA"
 author: "Kuldeep Singh Chouhan"
 date: "`r Sys.Date()`"
 output:
   html_document:
-    number_sections: true
+    number_sections: false
     fig_caption: true
     toc: true
     fig_width: 7
@@ -13,6 +13,8 @@ output:
     highlight: tango
     code_folding: hide
 ---
+
+**"Learning by doing"** the motto here is to help beginners engage more with Kaggle Competitions and to motivate them to start doing **practical Learning**. I personally like to thank [Kaggle](https://www.kaggle.com/) for providing such a great platform. 
 
 # Introduction
 
@@ -31,7 +33,7 @@ library(knitr)
 library(kableExtra)
 library(lubridate)
 library(prophet)
-library(ggplotify)
+library(plotly)
 ```
 
 # Loading And Understanding Data {.tabset .tabset-fade .tabset-pills}
@@ -69,11 +71,11 @@ calendar[1:5,] %>%
 
 **sales_train.csv** - Contains the historical daily unit sales data per product and store [d_1 - d_1913]. 
 
-  * This is the main training data. We can see there are columns containing information such as item, department, category, store and state and date variables for representing sales per date. 
+* This is the main training data. We can see there are columns containing information such as item, department, category, store and state and date variables for representing sales per date. 
 
-  * It has Columns starting with **d_** prefix which are dates indicating sales per day ranging from d_1 to d_1913, mean total 1913 days from 2011-01-29 to 2016-04-24. After including evaluation data of 28 days it will have total 1941 days which will be available once month before competition deadline.
+* It has Columns starting with **d_** prefix which are dates indicating sales per day ranging from d_1 to d_1913, mean total 1913 days from 2011-01-29 to 2016-04-24. After including evaluation data of 28 days it will have total 1941 days which will be available once month before competition deadline.
   
-  * Most of the observations are from the state of **California** followed by **Texas & Wisconsin.**
+* Most of the observations are from the state of **California** followed by **Texas & Wisconsin.**
   
 ```{r}
 train[1:5, 1:10] %>%
@@ -81,7 +83,7 @@ train[1:5, 1:10] %>%
   kable_styling()
 ```
 
-  * There are 10 stores in 3 states. 4 stores in California, 3 in Texas and 3 in Wisconsin. Also there are 3049 individual products across all stores.
+* There are 10 stores in 3 states. 4 stores in California, 3 in Texas and 3 in Wisconsin. Also there are 3049 individual products across all stores.
   
 ```{r}
 train %>%
@@ -91,7 +93,7 @@ train %>%
   kable_styling()
 ```
 
-  * There are 7 departments with 3 different categories.
+* There are 7 departments with 3 different categories.
    
 ```{r}
 train %>%
@@ -112,7 +114,24 @@ price[1:10,] %>%
   kable_styling()
 ```
 
-# Exploratory Data Analysis: Time Series 
+# Preparing Data for Time Series {.tabset .tabset-fade .tabset-pills}
+
+Our data is not in right format. We need to do some manipulation and preprocessing to visualize it. Our data is wide we need to transform it into long format with a date column since in order to plot it using **ggplot2**. Always check with str(data) how variables are understood by R. If not read as a date, use [lubridate](https://www.r-graph-gallery.com/time-series.html) to convert it. In order to develop some inuition about how to visualize time series data I took help from [here](https://www.r-graph-gallery.com/279-plotting-time-series-with-ggplot2.html).
+
+## Glimpse
+
+Let us get a quick glimpse of data types of respective columns in our **sales_train_validation.csv**. We can clearly see that there isn't any **date** column. We need to create a **Date Object** first.
+
+```{r}
+sapply(train[1:5, 1:10], class) %>%
+  kable() %>%
+  kable_styling()
+```
+
+
+## Helper function 
+
+Thanks to [Martin Henze](https://www.kaggle.com/headsortails) for this helper function. We are going to use [tidyverse](https://www.tidyverse.org/) for this. We are going to creating **date object** with the help of [lubridate's](https://lubridate.tidyverse.org/) **date()** and particularly using [pivot_longer](https://tidyr.tidyverse.org/reference/pivot_longer.html) to increase the number of rows and decrease the number of columns.
 
 ```{r}
 extract_ts <- function(df){
@@ -126,7 +145,42 @@ extract_ts <- function(df){
     mutate(dates = min_date + dates - 1) %>% 
     mutate(id = str_remove(id, "_validation"))
 }
+
+```
+
+# Exploratory Data Analysis: Time Series
+
+
+
+```{r}
+foo <- train %>%
+  summarise_at(vars(starts_with("d_")), sum) %>%
+  mutate(id = 1)
+
+bar <- extract_ts(foo)
+
+gg <- bar %>%
+  ggplot(aes(dates, sales)) +
+  geom_line(col = "blue") +
+  theme_bw() +
+  labs(x = "Date", y = "Sales", title = "All aggregate sales")
+
+ggplotly(gg, dynamicTicks = TRUE)
+
+```
+
+
+## Sales per State
+
+```{r}
+ 
 ```
 
 
 # Explanatory Variables
+
+# Reference
+
+* [pivot_longer](https://tidyr.tidyverse.org/reference/pivot_longer.html)
+
+* [r-graph-gallery](https://www.r-graph-gallery.com/279-plotting-time-series-with-ggplot2.html) 
