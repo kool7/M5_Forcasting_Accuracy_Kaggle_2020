@@ -38,6 +38,8 @@ library(kableExtra)
 library(lubridate)
 library(prophet)
 library(plotly)
+library(bbplot)
+library(patchwork)
 ```
 
 ## Data
@@ -170,8 +172,8 @@ bar <- extract_ts(foo)
 gg <- bar %>%
   ggplot(aes(dates, sales)) +
   geom_line(col = "blue") +
-  theme_bw() +
-  labs(x = "Date", y = "Sales", title = "All aggregate sales")
+  bbc_style() +
+  labs(x = "Date", y = "Sales", title = "All Aggregate Sales")
 
 ggplotly(gg, dynamicTicks = TRUE)
 
@@ -187,9 +189,87 @@ foo <- train %>%
   summarise_at(vars(starts_with("d_")), sum) %>%
   rename(id = state_id)
 
+bar <- extract_ts(foo) %>% 
+  mutate(month = month(dates),
+         year = year(dates)) %>% 
+  group_by(month, year, id) %>% 
+  summarise(sales = sum(sales),
+            dates = min(dates)) %>% 
+  ungroup() %>% 
+  filter(str_detect(as.character(dates), "..-..-01")) %>% 
+  filter(dates != max(dates))
+
+gg <- bar %>% 
+  ggplot(aes(dates, sales, col = id)) +
+  geom_line() +
+  bbc_style() +
+  labs(x = "Date", y = "Sales", title = "Monthly Sales per State")
+
+ggplotly(gg, dynamicTicks = TRUE)
 
 ```
 
+```{r warning=FALSE}
+
+foo <- train %>%
+  group_by(cat_id) %>% 
+  summarise_at(vars(starts_with("d_")), sum) %>% 
+  rename(id = cat_id)
+
+bar <- train %>%
+  group_by(store_id) %>% 
+  summarise_at(vars(starts_with("d_")), sum) %>% 
+  rename(id = store_id)
+
+p1 <- extract_ts(foo) %>% 
+  mutate(month = month(dates),
+         year = year(dates)) %>% 
+  group_by(month, year, id) %>% 
+  summarise(sales = sum(sales),
+            dates = min(dates)) %>% 
+  ungroup() %>% 
+  filter(str_detect(as.character(dates), "..-..-01")) %>% 
+  filter(dates != max(dates)) %>% 
+  ggplot(aes(dates, sales, col = id)) +
+  geom_line() +
+  bbc_style() +
+  theme(legend.position = "none") +
+  labs(title = "Sales per Category", x = "Date", y = "Sales")
+
+p2 <- train %>% 
+  count(cat_id) %>% 
+  ggplot(aes(cat_id, n, fill = cat_id)) +
+  geom_col() +
+  bbc_style() +
+  theme(legend.position = "none") +
+  theme(axis.text.x = element_text(size = 7)) +
+  labs(x = "", y = "", title = "Rows per Category")
+
+p3 <- extract_ts(bar) %>% 
+  mutate(month = month(dates),
+         year = year(dates)) %>% 
+  group_by(month, year, id) %>% 
+  summarise(sales = sum(sales),
+            dates = min(dates)) %>% 
+  ungroup() %>% 
+  filter(str_detect(as.character(dates), "..-..-01")) %>% 
+  filter(dates != max(dates)) %>% 
+  mutate(state_id = str_sub(id, 1, 2)) %>% 
+  ggplot(aes(dates, sales, col = id)) +
+  geom_line() +
+  bbc_style() +
+  theme(legend.position = "bottom") +
+  labs(title = "Sales per Store", x = "Date", y = "Sales", col = "Store ID") +
+  facet_wrap(~state_id)
+
+layout <- "
+AAB
+CCC
+"
+
+p1 + p2 + p3 + plot_layout(design = layout)
+
+```
 
 # Explanatory Variables
 
